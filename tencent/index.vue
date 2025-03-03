@@ -8,12 +8,29 @@
         <div class="flex items-center mb-4 h-auto">
           <div class="mr-2"><FiltQuery /></div>
           <span class="text-base text-[#072696] font-bold">筛选条件</span>
+          <t-space
+            class="ml-auto"
+            size="small"
+          >
+            <t-button
+              theme="primary"
+              type="submit"
+              @click="submitTableSearchForm"
+              >查询</t-button
+            >
+            <t-button
+              theme="default"
+              variant="base"
+              type="reset"
+              @click="resetTableSearchForm"
+              >重置</t-button
+            >
+          </t-space>
         </div>
         <t-form
           v-if="$slots.tableSearchFormItem || searchFormFields.length"
           :data="tableSearchForm"
           layout="inline"
-          labelWidth="150px"
           v-bind="attrs?.tableSearchFormAttrs || {}"
         >
           <slot
@@ -21,32 +38,25 @@
             v-bind="{ tableSearchForm }"
           ></slot>
           <template v-for="filed in searchFormFields">
-            <t-form-item
-              :label="filed.title"
-              :name="filed.colKey"
-            >
-              <MapFieldTypeToElFormItem
-                v-bind="filed"
-                :form-model="tableSearchForm"
-              />
-            </t-form-item>
+            <!-- <t-row :gutter="[8, 24]"> -->
+            <t-col :span="filed.formItemAttrs?.span || 4">
+              <t-form-item
+                :label="filed.title"
+                :name="filed.colKey"
+                v-bind="filed.formItemAttrs || {}"
+                :style="{
+                  width: '90%',
+                  marginLeft: '10px',
+                }"
+              >
+                <MapFieldTypeToElFormItem
+                  v-bind="filed"
+                  :form-model="tableSearchForm"
+                />
+              </t-form-item>
+            </t-col>
+            <!-- </t-row> -->
           </template>
-          <t-form-item>
-            <t-space size="small">
-              <t-button
-                theme="primary"
-                type="submit"
-                @click="submitTableSearchForm"
-                >查询</t-button
-              >
-              <t-button
-                theme="default"
-                variant="base"
-                type="reset"
-                >重置</t-button
-              >
-            </t-space>
-          </t-form-item>
         </t-form>
       </t-card>
       <div class="flex justify-center mt-[-8px] cursor-pointer">
@@ -60,20 +70,34 @@
     </div>
 
     <t-card :bordered="false">
-      <t-row v-if="$slots.tableHeadOptions">
-        <slot
-          name="tableHeadOptions"
-          v-bind="{
-            handleAddRow,
-            handleDeleteRow,
-          }"
-        ></slot>
-      </t-row>
       <t-row
         class="mb-2"
-        v-if="rowOpreations?.addRow || rowOpreations?.export || rowOpreations?.import || rowOpreations?.deleteRow"
+        v-if="
+          rowOpreations?.addRow ||
+          rowOpreations?.export ||
+          rowOpreations?.import ||
+          rowOpreations?.deleteRow ||
+          $slots.tableHeadOptions
+        "
       >
         <t-space>
+          <!-- <t-popup
+            placement="bottom"
+            destroy-on-close
+            trigger="click"
+          >
+            <t-button>
+              <template #icon>
+                <SetIcon />
+              </template>
+              列配置
+            </t-button>
+
+            <template #content>
+              <ColumnConfig />
+            </template>
+          </t-popup> -->
+
           <slot
             v-if="$slots.tableAddSlots"
             name="tableAddSlots"
@@ -100,19 +124,35 @@
             v-if="rowOpreations?.export"
             >导出</t-button
           >
-          <t-button
-            theme="primary"
-            v-if="rowOpreations?.import"
-            @click="handleImport"
-            >导入</t-button
-          >
+          <slot
+            v-if="$slots.tableImportSlots"
+            name="tableImportSlots"
+            v-bind="{ handleImport }"
+          ></slot>
+          <template v-else>
+            <t-button
+              theme="primary"
+              v-if="rowOpreations?.import"
+              @click="handleImport"
+              >导入</t-button
+            >
+          </template>
+
+          <template v-if="$slots.tableHeadOptions">
+            <slot
+              name="tableHeadOptions"
+              v-bind="{
+                handleAddRow,
+                handleDeleteRow,
+              }"
+            ></slot>
+          </template>
         </t-space>
       </t-row>
       <t-table
         :row-key="props.rowKey"
         :selected-row-keys="selectedRowKeys"
         @select-change="rehandleSelectChange"
-        :select-on-row-click="true"
         :data="tableData.list"
         :columns="tableColumns"
         :loading="tableData.loadingTable"
@@ -120,11 +160,13 @@
         size="small"
         :pagination="tableData.pagination"
         @page-change="onPageChange"
+        resizable
       />
     </t-card>
     <Dialog
       ref="tableDialogRef"
       :on-ok="okDialog"
+      v-bind="attrs?.tableDialogAttrs || {}"
     >
       <template #header>
         <h3 class="font-medium text-[16px] height-[56px] leading-[24px]">
@@ -138,6 +180,8 @@
         :rules="dialogRules"
         label-position="right"
         label-width="auto"
+        layout="inline"
+        v-bind="attrs?.dialogFormAttrs || {}"
       >
         <template v-if="$slots.editDialog && currentDialogMode === 'editForm'">
           <slot
@@ -151,19 +195,52 @@
             v-bind="{ tableDialogForm }"
           ></slot>
         </template>
+
         <template
           v-else
           v-for="filed in dialogFormFields"
         >
-          <t-form-item
-            :label="filed.title"
-            :name="filed.colKey"
-          >
-            <MapFieldTypeToElFormItem
-              v-bind="filed"
-              :form-model="tableDialogForm"
-            />
-          </t-form-item>
+          <template v-if="attrs?.dialogFormAttrs?.layout === 'horizontal'">
+            <t-form-item
+              :label="filed.title"
+              :name="filed.colKey"
+              v-bind="filed.dialogFormItemAttrs || {}"
+              :style="{
+                width: '90%',
+                marginLeft: '10px',
+              }"
+            >
+              <MapFieldTypeToElFormItem
+                v-bind="filed"
+                :form-model="tableDialogForm"
+              />
+            </t-form-item>
+          </template>
+          <template v-else>
+            <t-col :span="filed.dialogFormItemAttrs?.span || 4">
+              <t-form-item
+                :label="filed.title"
+                :name="filed.colKey"
+                v-bind="filed.dialogFormItemAttrs || {}"
+                :style="{
+                  width: '90%',
+                  marginLeft: '10px',
+                }"
+              >
+                <MapFieldTypeToElFormItem
+                  v-bind="filed"
+                  :form-model="tableDialogForm"
+                />
+              </t-form-item>
+            </t-col>
+          </template>
+        </template>
+
+        <template v-if="$slots.extraDialogFormField">
+          <slot
+            name="extraDialogFormField"
+            v-bind="{ tableDialogForm, currentDialogMode }"
+          ></slot>
         </template>
       </t-form>
     </Dialog>
@@ -174,11 +251,16 @@
 import { computed, onMounted, reactive, ref, useAttrs } from 'vue';
 import type { DataSource, GetTableData, ProTableProps } from './ProTable.d.ts';
 import FiltQuery from '@/assets/tprotable/filtQuery.svg?component';
+import SetIcon from '@/assets/tprotable/setIcon.svg?component';
 import tableConfig from './tableConfig';
 import Dialog from './dialog.vue';
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
+import { DialogPlugin, MessagePlugin, Pagination } from 'tdesign-vue-next';
 import { request } from '@/utils/request/index.js';
 import MapFieldTypeToElFormItem from './MapFieldTypeToElFormItem.vue';
+import ColumnConfig from './columnConfig.vue';
+
+const emit = defineEmits(['beforeSearch', 'beforeDialogConfirm', 'afterDialogConfirm', 'beforeShowDialog']);
+
 const dialogMode = {
   editForm: '编辑',
   add: '新增',
@@ -191,7 +273,7 @@ const currentDialogMode = ref<currentDialogMode>('add');
 const attrs = useAttrs() as Record<string, any>;
 const props = defineProps<ProTableProps>();
 
-const tableSearchForm = reactive<any>({});
+let tableSearchForm = reactive<any>({});
 
 const tableData = ref({
   list: [],
@@ -230,9 +312,13 @@ const searchFormFields = computed(() => {
     })
     .filter(Boolean);
 }) as any;
-console.log('searchFormFields', searchFormFields.value);
+// console.log('searchFormFields', searchFormFields.value);
 const tableColumns = computed(() => {
-  if (props?.rowOpreations?.editRow || props?.rowOpreations?.deleteRow) {
+  console.log('props.rowOpreations', props.rowOpreations);
+  if (
+    (props?.rowOpreations?.editRow || props?.rowOpreations?.deleteRow) &&
+    !props.columns.some((column: any) => column.colKey === 'action')
+  ) {
     props.columns.push({
       title: '操作',
       colKey: 'action',
@@ -262,15 +348,16 @@ const tableColumns = computed(() => {
       },
     });
   }
-  return props.columns;
+
+  return props.columns.filter((column: any) => !column.hideInColumn);
 });
 
-console.log('dialogFormFields', dialogFormFields.value);
+// console.log('dialogFormFields', dialogFormFields.value);
 // row-select 选中行
 const selectedRowKeys = ref<string[]>([]);
 const rehandleSelectChange = (value: string[], ctx: any) => {
   selectedRowKeys.value = value;
-  console.log(value, ctx);
+  // console.log(value, ctx);
 };
 
 const formExpanded = ref<boolean>(true);
@@ -281,13 +368,14 @@ const getTableData = async ({ size, page, params }: GetTableData) => {
     tableData.value.loadingTable = true;
     try {
       const result = (await props.dataSource({ size, page, params })) as DataSource;
-      console.log('result', result);
+      console.log('**********', result);
       tableData.value.list = result.list;
       tableData.value.pagination.total = result.total;
       tableData.value.pagination.defaultCurrent = result.page;
       tableData.value.pagination.defaultPageSize = result.size;
     } catch (e) {
       console.log(e);
+      // MessagePlugin.error(e.message);
     } finally {
       tableData.value.loadingTable = false;
       // nextTick(() => {
@@ -318,10 +406,25 @@ onMounted(async () => {
 });
 
 const submitTableSearchForm = async () => {
+  emit('beforeSearch', tableSearchForm);
+  console.log('submitTableSearchForm', tableSearchForm);
+
   await refresh();
 };
 
+const resetTableSearchForm = () => {
+  searchFormFields.value.forEach((field: any) => {
+    delete tableSearchForm[field.colKey];
+  });
+
+  console.log('resetTableSearchForm', tableSearchForm);
+  emit('beforeSearch', tableSearchForm);
+  refresh();
+};
+
+// 导入
 const handleImport = () => {
+  console.log('handleImport', props.rowOpreations?.import);
   if (
     typeof props.rowOpreations?.import === 'object' &&
     typeof props.rowOpreations.import.handleImport === 'function'
@@ -331,23 +434,25 @@ const handleImport = () => {
 };
 
 const onPageChange = async ({ current, pageSize }: { current: number; pageSize: number }) => {
-  console.log('page-change', current, pageSize);
+  // console.log('page-change', current, pageSize);
   await getTableData({ page: current, size: pageSize, params: tableSearchForm });
 };
 
 const handleAddRow = () => {
+  emit('beforeShowDialog', 'add');
   tableDialogRef.value.show();
   currentDialogMode.value = 'add';
   Object.keys(tableDialogForm).map((key) => (tableDialogForm[key] = ''));
-  console.log('tableDialogForm', tableDialogForm);
+  // console.log('tableDialogForm', tableDialogForm);
 };
 
 const handleEditRow = (row: any) => {
+  emit('beforeShowDialog', 'edit');
   tableDialogRef.value.show();
   currentDialogMode.value = 'editForm';
 
   tableDialogForm = Object.assign(tableDialogForm, { ...row });
-  console.log('tableDialogForm', tableDialogForm, { ...row });
+  // console.log('tableDialogForm', tableDialogForm, { ...row });
   typeof props.onEditRow === 'function' && props.onEditRow(tableDialogForm);
 };
 
@@ -367,12 +472,17 @@ const handleDeleteRow = (row?: any) => {
           data: deleteRow.params(row || selectedRowKeys.value),
         });
         MessagePlugin.success('操作成功');
+
+        // tableData.value.pagination.defaultCurrent = 1;
+        // tableData.value.pagination.defaultPageSize = 10;
+
         await refresh();
         confirmDia.hide();
       } catch (e) {
         console.log(e);
       } finally {
         typeof deleteRow.afterDelete === 'function' && deleteRow.afterDelete(row);
+        selectedRowKeys.value = [];
       }
     },
     onClose: () => {
@@ -383,25 +493,27 @@ const handleDeleteRow = (row?: any) => {
 
 const okDialog = async () => {
   await tableDialogFormRef.value.validate();
-
+  emit('beforeDialogConfirm', tableDialogForm);
   if (currentDialogMode.value === 'add') {
     const addRow = props.rowOpreations.addRow;
     const result = await request.post({
       url: addRow.url,
-      data: addRow.params({ ...tableDialogForm, ...tableSearchForm }),
+      data: addRow.params({ ...tableDialogForm }),
     });
     MessagePlugin.success('操作成功');
     await refresh();
+    emit('afterDialogConfirm', result);
     return result;
   }
   if (currentDialogMode.value === 'editForm') {
     const editRow = props.rowOpreations.editRow;
     const result = await request.post({
       url: editRow.url,
-      data: editRow.params({ ...tableDialogForm, ...tableSearchForm }),
+      data: editRow.params(tableDialogForm),
     });
     MessagePlugin.success('操作成功');
     await refresh();
+    emit('afterDialogConfirm', result);
     return result;
   }
 };
@@ -410,5 +522,6 @@ defineExpose({
   refresh,
   tableSearchForm,
   tableData,
+  selectedRowKeys,
 });
 </script>
