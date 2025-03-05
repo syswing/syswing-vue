@@ -7,7 +7,11 @@
       >
         <div class="flex items-center mb-4 h-auto">
           <div class="mr-2"><FiltQuery /></div>
-          <span class="text-base text-[#072696] font-bold">筛选条件</span>
+          <span
+            :style="{ color: color }"
+            :class="`text-base font-bold`"
+            >筛选条件</span
+          >
           <t-space
             class="ml-auto"
             size="small"
@@ -81,7 +85,7 @@
         "
       >
         <t-space>
-          <!-- <t-popup
+          <t-popup
             placement="bottom"
             destroy-on-close
             trigger="click"
@@ -94,9 +98,15 @@
             </t-button>
 
             <template #content>
-              <ColumnConfig />
+              <column-config
+                :columns="tableColumns"
+                @changeCloumnsDisplay="changeCloumnsDisplay"
+                @changeCloumnsFixed="changeCloumnsFixed"
+                @changeCloumnsDrag="changeCloumnsDrag"
+                @resetColumns="resetColumns"
+              />
             </template>
-          </t-popup> -->
+          </t-popup>
 
           <slot
             v-if="$slots.tableAddSlots"
@@ -150,6 +160,7 @@
         </t-space>
       </t-row>
       <t-table
+        v-model:displayColumns="displayColumns"
         :row-key="props.rowKey"
         :selected-row-keys="selectedRowKeys"
         @select-change="rehandleSelectChange"
@@ -248,7 +259,7 @@
 </template>
 
 <script setup lang="tsx">
-import { computed, onMounted, reactive, ref, useAttrs } from 'vue';
+import { computed, onMounted, reactive, ref, useAttrs, useSlots } from 'vue';
 import type { DataSource, GetTableData, ProTableProps } from './ProTable.d.ts';
 import FiltQuery from '@/assets/tprotable/filtQuery.svg?component';
 import SetIcon from '@/assets/tprotable/setIcon.svg?component';
@@ -257,7 +268,9 @@ import Dialog from './dialog.vue';
 import { DialogPlugin, MessagePlugin, Pagination } from 'tdesign-vue-next';
 import { request } from '@/utils/request/index.js';
 import MapFieldTypeToElFormItem from './MapFieldTypeToElFormItem.vue';
+import { useSettingStore } from '@/store/modules/setting';
 import ColumnConfig from './columnConfig.vue';
+import { dict2Map } from './utils';
 
 const emit = defineEmits(['beforeSearch', 'beforeDialogConfirm', 'afterDialogConfirm', 'beforeShowDialog']);
 
@@ -275,6 +288,12 @@ const props = defineProps<ProTableProps>();
 
 let tableSearchForm = reactive<any>({});
 
+const settingStore = useSettingStore();
+
+const color = computed(() => {
+  return settingStore.displayMode === 'dark' ? '#fff' : '#072696';
+});
+
 const tableData = ref({
   list: [],
   loadingTable: false,
@@ -288,6 +307,23 @@ const tableData = ref({
 const tableDialogRef = ref<InstanceType<typeof Dialog>>();
 let tableDialogForm = reactive<any>({});
 const tableDialogFormRef = ref();
+
+// const staticColumn = ['applicant', 'status'];
+// const displayColumns = ref(staticColumn.concat(['channel', 'detail.email', 'createTime']));
+
+// const columnControllerConfig = computed(() => ({
+//   // 列配置按钮位置
+//   placement: 'top-right',
+//   // 用于设置允许用户对哪些列进行显示或隐藏的控制，默认为全部字段
+//   fields: ['blnoDataCheckType', 'blno', 'cname'],
+
+//   // 弹框组件属性透传
+//   dialogProps: { preventScrollThrough: true },
+//   // 列配置按钮组件属性透传
+//   // buttonProps: customText.value ? { content: '显示列控制', theme: 'primary', variant: 'base' } : undefined,
+
+//   // 数据字段分组显示
+// }));
 
 const dialogFormFields = computed(() => {
   return props.columns
@@ -310,8 +346,13 @@ const searchFormFields = computed(() => {
         return false;
       }
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((a: any, b: any) => a.search - b.search);
 }) as any;
+
+// 列配置 fixed 固定
+const fixedColumns = ref([]);
+const slots = useSlots();
 // console.log('searchFormFields', searchFormFields.value);
 const tableColumns = computed(() => {
   console.log('props.rowOpreations', props.rowOpreations);
@@ -322,36 +363,111 @@ const tableColumns = computed(() => {
     props.columns.push({
       title: '操作',
       colKey: 'action',
+      width: props?.rowOpreations?.width || 200,
       cell: (h: any, { row }: { row: any }) => {
         return (
-          <t-space>
+          <t-space size="small">
             {props?.rowOpreations?.editRow && (
-              <t-link
+              <t-button
                 hover="color"
                 theme="primary"
+                size="small"
                 onClick={() => handleEditRow(row)}
               >
                 编辑
-              </t-link>
+              </t-button>
             )}
             {props?.rowOpreations?.deleteRow && (
-              <t-link
+              <t-button
                 hover="color"
+                size="small"
                 theme="danger"
                 onClick={() => handleDeleteRow(row)}
               >
                 删除
-              </t-link>
+              </t-button>
             )}
+            {slots.extraAction?.({ row })}
           </t-space>
         );
       },
     });
   }
 
-  return props.columns.filter((column: any) => !column.hideInColumn);
+  let columns = props.columns
+    .filter((column: any) => !column.hideInColumn)
+    .map((column: any) => {
+      // 添加字段映射处理
+      if (column.options && !column.cell) {
+        column.cell = (h: any, { row }: { row: any }) => {
+          return h('span', {}, dict2Map(column.options)[row[column.colKey]]);
+        };
+      }
+
+      if (column.colKey === 'row-select' || column.colKey === 'action') {
+        column.colKey === 'row-select' ? (column.fixed = 'left') : (column.fixed = 'right');
+      } else {
+        column.check = true;
+
+        if (fixedColumns.value.includes(column.colKey)) {
+          column.fixed = 'left';
+        } else {
+          column.fixed = false;
+        }
+      }
+
+      return column;
+    });
+  const rowSelectColumn = columns.find((c: any) => c.colKey === 'row-select');
+  const actionColumn = columns.find((c: any) => c.colKey === 'action');
+  const normalColumns = columns.filter((c: any) => c.colKey !== 'row-select' && c.colKey !== 'action');
+
+  // 对普通列按照columnsIndex排序
+  let sortedNormalColumns = normalColumns;
+  if (columnsIndex.value.length > 0) {
+    sortedNormalColumns = columnsIndex.value.reduce((acc: any[], colKey: string) => {
+      const col = normalColumns.find((c: any) => c.colKey === colKey);
+      if (col) acc.push(col);
+      return acc;
+    }, []);
+  }
+  return [rowSelectColumn, ...sortedNormalColumns, actionColumn].filter(Boolean);
 });
 
+const displayColumns = computed(() => {
+  console.log(
+    'tableColumns.value',
+    tableColumns.value.map((c: any) => c.colKey),
+  );
+  return tableColumns.value
+    .filter((column: any) => !hiddenColumns.value.includes(column.colKey))
+    .map((column: any) => column.colKey);
+});
+
+// 列配置 checkbox 隐藏
+const hiddenColumns = ref([]);
+// 列配置 drag 顺序
+const columnsIndex = ref(props.defaultIndex || []);
+
+const changeCloumnsDisplay = (columns: any) => {
+  console.log('changeCloumnsDisplay', columns);
+  hiddenColumns.value = columns;
+};
+const changeCloumnsFixed = (columns: any) => {
+  fixedColumns.value = columns;
+};
+
+const changeCloumnsDrag = (columns: any) => {
+  columnsIndex.value = columns;
+};
+
+const resetColumns = (columns: any) => {
+  columnsIndex.value = props.defaultIndex || [];
+  hiddenColumns.value = [];
+  fixedColumns.value = [];
+};
+
+// console.log('displayColumns', displayColumns.value);
 // console.log('dialogFormFields', dialogFormFields.value);
 // row-select 选中行
 const selectedRowKeys = ref<string[]>([]);
@@ -363,7 +479,7 @@ const rehandleSelectChange = (value: string[], ctx: any) => {
 const formExpanded = ref<boolean>(true);
 
 const getTableData = async ({ size, page, params }: GetTableData) => {
-  // console.log('getTableDatae', props.dataSource, typeof props.dataSource, props.dataSource instanceof Array);
+  console.log('getTableDatae', props.dataSource, typeof props.dataSource, props.dataSource instanceof Array);
   if (typeof props.dataSource === 'function') {
     tableData.value.loadingTable = true;
     try {
@@ -465,8 +581,10 @@ const handleDeleteRow = (row?: any) => {
   const confirmDia = DialogPlugin({
     header: '删除确认',
     body: row ? `确定要删除吗？` : `确定要删除选中的${selectedRowKeys.value.length}条数据吗？`,
+    confirmLoading: false,
     onConfirm: async () => {
       try {
+        confirmDia.setConfirmLoading(true);
         await request.post({
           url: deleteRow.url,
           data: deleteRow.params(row || selectedRowKeys.value),
@@ -483,6 +601,7 @@ const handleDeleteRow = (row?: any) => {
       } finally {
         typeof deleteRow.afterDelete === 'function' && deleteRow.afterDelete(row);
         selectedRowKeys.value = [];
+        confirmDia.setConfirmLoading(false);
       }
     },
     onClose: () => {
@@ -523,5 +642,7 @@ defineExpose({
   tableSearchForm,
   tableData,
   selectedRowKeys,
+  currentDialogMode,
+  tableDialogForm,
 });
 </script>

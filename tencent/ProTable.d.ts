@@ -4,6 +4,7 @@ export interface ProTableProps {
   columns?: Column[] | undefined | any;
   dataSource?: any[] | ((params: GetTableData) => Promise<DataSource>);
   rowOpreations?: {
+    width?: number;
     deleteRow?: {
       url?: string;
       params?: Function;
@@ -35,6 +36,7 @@ export interface ProTableProps {
   onEditRow?: Function;
   rowKey?: string;
   firstInit?: boolean;
+  defaultIndex?: string[];
 }
 
 interface GetTableData {
